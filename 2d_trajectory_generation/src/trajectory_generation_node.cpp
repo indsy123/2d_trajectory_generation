@@ -124,7 +124,7 @@ void localplanner::PublishTrajectory(const sensor_msgs::PointCloud2ConstPtr& clo
     traj.joint_names.resize(1);
     traj.joint_names[0] ="jackal_base_link";
     traj.header.frame_id = "map";
-    traj.header.stamp = ros::Time::now();//cloud->header.stamp;
+    traj.header.stamp = ros::Time::now();
     double start_time = ros::Time::now().toSec();
 
     for (int i = 0; i < t.size(); i++)
@@ -157,8 +157,6 @@ void localplanner::PublishTrajectory(const sensor_msgs::PointCloud2ConstPtr& clo
       point.time_from_start  = ros::Duration(_time);
       traj.points[i] = point;      
       
-      //std::this_thread::sleep_for(std::chrono::milliseconds(20));
-      //loop_rate.sleep();
     }
     traj_pub.publish(traj);
     ROS_INFO_STREAM("Publishing polynomial trajectory.");
@@ -190,7 +188,7 @@ void localplanner::odometry_callback(const nav_msgs::Odometry::ConstPtr& msg)
     ch_point[1] = 0.1;//msg->twist.twist.linear.x; //started with a small initial velocity always
     ch_point[2] = 0.0; // sensor doesnt give acceleration, so a small initial value
     ch_point[3] = msg->pose.pose.position.y;         
-    ch_point[4] = msg->twist.twist.linear.y; // no need to give any velocity in y direction 
+    ch_point[4] = 0.0;// no need to give any velocity in y direction 
     ch_point[5] = 0.0; //initilized with 0 accelration 
     ch_point[6] = tf2::getYaw(msg->pose.pose.orientation);
     ch_point[7] = msg->twist.twist.angular.z;

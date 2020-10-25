@@ -3,9 +3,9 @@
 
   <arg name="node_start_delay" default="0.0" />
   <!-- controller parameters /-->
-  <!--param name="pose_topic" value="/jackal/ground_truth/state" /-->
+  <param name="pose_topic" value="/jackal/ground_truth/state" />
   <param name="trajectory_topic" value="/jackal/desired_trajectory" />
-  <param name="pose_topic" value="/cvio_s4/odom" />
+  <!--param name="pose_topic" value="/cvio_s4/odom" /-->
 
 
   <param name="epsilon" value="0.2" />
@@ -16,9 +16,9 @@
   <param name="lidar_frequency" value="10.0" />
   <param name="average_speed" value="0.25" />
   <param name="max_sensor_range" value="5.0" />
-  <param name="min_sensor_range" value="2.0" />
+  <param name="min_sensor_range" value="1.0" />
   <param name="sensor_fov" value="120.0	" />
-  <rosparam param="final_goal">[0.5,0.0]</rosparam>
+  <rosparam param="final_goal">[0.0,0.0]</rosparam>
 
 
   <node pkg="nodelet" type="nodelet" name="pcl_manager" args="manager" output="screen" />

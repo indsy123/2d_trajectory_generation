@@ -38,7 +38,7 @@ void RayGeneration:: GenerateEnsamble(vector<double>& current_pose, double& rang
     for (int j = -half_angle; j <= half_angle; j = j + 5)
     {
       x = r * cos(j*PI/180); 
-      y = r* sin(j*PI/180); 
+      y = r * sin(j*PI/180); 
 
       p[0] = x0 + x * cos(current_yaw) - y * sin(current_yaw);
       p[1] = y0 + x * sin(current_yaw) + y * cos(current_yaw);
@@ -54,7 +54,7 @@ void RayGeneration::CheckCollosion_GetCost(pcl::PointCloud<pcl::PointXYZ>::Ptr& 
                                   pcl::PointCloud<pcl::PointXYZ>& ensamble_cloud)
 {
   float robot_radius = 0.4;
-  float SR = 0.8;
+  float SR = 3.0;
   float factor = (1 + pow(SR, 4))/pow(SR, 4);
   bool EmptyPointCloud;
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_trans (new pcl::PointCloud<pcl::PointXYZ>);
@@ -140,15 +140,6 @@ void RayGeneration::CheckCollosion_GetCost(pcl::PointCloud<pcl::PointXYZ>::Ptr& 
         a[1] = points[i][1];
         a[2] = (final_goal[0]-points[i][0])*(final_goal[0]-points[i][0]) + (final_goal[1]-points[i][1])*(final_goal[1]-points[i][1]);
         a[3] = std::accumulate(distance_with_obstacles.begin(), distance_with_obstacles.end(), 0.0);
-        //a[2] = sqrt((final_goal[0]-points[i][0])*(final_goal[0]-points[i][0]) + (final_goal[1]-points[i][1])*(final_goal[1]-points[i][1]));
-      
-        //double min_cost_of_traj = *std::min_element(distance_with_obstacles.begin(),distance_with_obstacles.end());
-        //cout <<"distance with obstacle:" << min_cost_of_traj<<endl;
-        //if (min_cost_of_traj - robot_radius < SR)
-        //{
-        //  a[3] = factor* pow((pow(min_cost_of_traj-robot_radius, 2)- SR*SR), 2) / (1 + pow((pow(min_cost_of_traj-robot_radius, 2)- SR*SR), 2));
-        //}
-        //else{a[3] = 0;}
 
         for (int k = 0; k < interval; k++)
         {
@@ -184,7 +175,7 @@ void RayGeneration::GenerateLocalGoal(vector< vector<double>>& availablepoints, 
 {
 
   double fd = 1;
-  double fc = 10;
+  double fc = 1;
 
   vector<double> dist2finalgoal(availablepoints.size());
   vector<double> dist2goal_cost(availablepoints.size());
@@ -213,7 +204,7 @@ void RayGeneration::GenerateLocalGoal(vector< vector<double>>& availablepoints, 
   for (int i = 0; i < availablepoints.size(); i++)
   {
 
-    total_cost[i] = fd * dist2goal_cost[i] / max_dist2goal_cost + fc * collision_cost[i];
+    total_cost[i] = fd * dist2goal_cost[i] / max_dist2goal_cost + fc * collision_cost[i] / max_collision_cost;
     //cout << "i:"<<i<<" "<<"dist2goal:"<< dist2goal_cost[i]<<" "<<"collision:" <<collision_cost[i] <<" "<<"total"<< total_cost[i]<<endl;
   }
 
