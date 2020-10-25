@@ -19,7 +19,7 @@ using namespace std;
 using namespace Eigen;
 
 void RayGeneration:: GenerateEnsamble(vector<double>& current_pose, double& range_max, double& range_min, double& FOV, 
-                                      double& resolution, vector< vector<double>>& points, vector<double>& ch_point)
+                                      vector< vector<double>>& points)
 {
   double current_yaw, x0, y0, d, r, x, y;
   current_yaw = current_pose[6];//tf2::getYaw(current_pose->pose.pose.orientation);

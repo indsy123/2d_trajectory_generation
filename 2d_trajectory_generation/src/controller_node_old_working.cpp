@@ -13,7 +13,7 @@
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <trajectory_msgs/MultiDOFJointTrajectoryPoint.h>
 
-
+ros::Publisher cmd_pub; 
 using namespace std;
 using namespace Eigen;
 using std::ofstream;
@@ -22,60 +22,25 @@ std::ofstream outdata;
 class controller
 {
     public: 
-      controller(ros::NodeHandle* nodehandle)
+      controller()
       {
-        ROS_INFO("in class constructor of controller");
-        getParamters();
-        initializeSubscribers(); 
-        initializePublishers();
-
         curr_pose = {0,0,0,0,0,0,0,0};
         global_counter = 0;
       };
       void cmd_callback(const trajectory_msgs::MultiDOFJointTrajectory::ConstPtr& msg);
-      void odometry_callback(const nav_msgs::Odometry::ConstPtr& _msg);      
+      void odometry_callback(const nav_msgs::Odometry::ConstPtr& _msg);
+      //void PublishCommands(double &x, double &y, double &th, double &xdot, double &ydot, double &thdot, double &tt);    
     private: 
-      ros::NodeHandle nh_;
-      void initializeSubscribers(); 
-      void initializePublishers();
-      void getParamters();
-
-      ros::Subscriber odom_sub, trajectory_sub;
-      ros::Publisher cmd_pub; 
-
-      double epsilon, k;
-      string pose_topic, trajectory_topic;
-
-      std::vector <double> curr_pose;
-      std::vector <double> xdes, ydes, vxdes, vydes, thetades, wdes, traj_global_time;
-      int global_counter;
-      bool TrajectoryPublished = false;
+        std::vector <double> curr_pose;
+        float epsilon = 0.2; 
+        float k = 1.5;
+        std::vector <double> xdes, ydes, vxdes, vydes, thetades, wdes, traj_global_time;
+        //std::vector<const> traj_global_time;
+        int global_counter;
+        bool TrajectoryPublished = false;
 
 };
 
-void controller::getParamters()
-{
-  // get all the parameters from launch file
-  nh_.param<double>("epsilon", epsilon, 0.15);    
-  nh_.param<double>("k", k, 1.25);
-  nh_.param<std::string>("pose_topic", pose_topic, "/odometry_topic");    
-  nh_.param<std::string>("trajectory_topic", trajectory_topic, "/desired_trajectory_topic");
-}
-
-void controller::initializeSubscribers()
-{
-  ROS_INFO("Initializing Subscribers");
-
-  odom_sub = nh_.subscribe(pose_topic.c_str(), 1, &controller::odometry_callback, this);  
-  trajectory_sub = nh_.subscribe(trajectory_topic.c_str(), 1, &controller::cmd_callback, this);  
-}
-
-void controller::initializePublishers()
-{
-  ROS_INFO("Initializing Publishers");
-  bool latch;
-  cmd_pub = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
-}
 
 
 void controller::odometry_callback(const nav_msgs::Odometry::ConstPtr& msg) 
@@ -93,7 +58,6 @@ void controller::odometry_callback(const nav_msgs::Odometry::ConstPtr& msg)
 
     if (TrajectoryPublished == true)
     {
-
       auto it = std::lower_bound(traj_global_time.begin(), traj_global_time.end(), current_time);
       int j = std::distance(traj_global_time.begin(), it);
       if (j == traj_global_time.size()){j = j-1;}
@@ -174,15 +138,27 @@ int main(int argc, char **argv)
     // Launch controller node
     ros::init(argc, argv, "trajectory_controller_node");
     ros::NodeHandle nh("~");
+    bool latch;
+    cmd_pub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 1, latch=true);
 
+    std::string pose_topic;
+    nh.param<std::string>("pose_topic", pose_topic, "/jackal/ground_truth/state");
+
+    std::string trajectory_topic;
+    nh.param<std::string>("trajectory_topic", trajectory_topic, "/jackal/desired_trajectory");
+
+    // Create subscribers
+    controller c;
     time_t t = time(0);   // get time now
     struct tm * now = localtime( & t );
+
     char buffer [80];
     strftime (buffer,80,"gain - %d-%m-%Y %I:%M:%S.",now);
     outdata.open(buffer);
 
-    // Create subscribers
-    controller c(&nh);
+
+    ros::Subscriber sub1 = nh.subscribe(pose_topic.c_str(), 1, &controller::odometry_callback, &c, ros::TransportHints().tcpNoDelay());
+    ros::Subscriber sub2 = nh.subscribe(trajectory_topic.c_str(), 1, &controller::cmd_callback, &c, ros::TransportHints().tcpNoDelay());
 
     ROS_INFO("done...spinning to ros");
     ros::spin();

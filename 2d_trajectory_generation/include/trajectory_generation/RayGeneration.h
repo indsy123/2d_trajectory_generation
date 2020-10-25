@@ -17,8 +17,8 @@ class RayGeneration
 { 
   public: 
     RayGeneration() {};
-    void GenerateEnsamble(vector<double>& current_pose, double &range_max, double &range_min, double &FOV, double &resolution,
-                          vector< vector<double>> &points, vector<double> &ch_point);
+    void GenerateEnsamble(vector<double>& current_pose, double &range_max, double &range_min, double &FOV,
+                          vector< vector<double>> &points);
 
     void CheckCollosion_GetCost(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, vector<double>& final_goal, double& av_speed, vector<double>& start_point, 
                         vector< vector<double>>& points, vector< vector<double>>& availablepoints, pcl::PointCloud<pcl::PointXYZ>& ensamble_cloud);

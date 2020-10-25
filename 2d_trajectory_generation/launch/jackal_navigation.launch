@@ -2,6 +2,24 @@
 <launch>
 
   <arg name="node_start_delay" default="0.0" />
+  <!-- controller parameters /-->
+  <!--param name="pose_topic" value="/jackal/ground_truth/state" /-->
+  <param name="trajectory_topic" value="/jackal/desired_trajectory" />
+  <param name="pose_topic" value="/cvio_s4/odom" />
+
+
+  <param name="epsilon" value="0.2" />
+  <param name="k" value="1.25" />
+  <!-- planner parameters /-->
+  <param name="pointcloud_topic" value="/passthrough2/output" />
+  <param name="odometry_frequency" value="100.0" />
+  <param name="lidar_frequency" value="10.0" />
+  <param name="average_speed" value="0.25" />
+  <param name="max_sensor_range" value="5.0" />
+  <param name="min_sensor_range" value="2.0" />
+  <param name="sensor_fov" value="120.0	" />
+  <rosparam param="final_goal">[0.5,0.0]</rosparam>
+
 
   <node pkg="nodelet" type="nodelet" name="pcl_manager" args="manager" output="screen" />
 
@@ -39,8 +57,9 @@
     </rosparam>
   </node>
    
-  <node pkg="trajectory_generation" name="Controller" type="controller_node" respawn="true" output="screen"/>
-  <node pkg="trajectory_generation" name="TrajectoryGeneration" type="trajectory_generation_node" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' " respawn="true" output="screen"/>
+  <node pkg="2d_trajectory_generation" name="controller" type="controller_node" respawn="true" output="screen"/>
+
+  <node pkg="2d_trajectory_generation" name="TrajectoryGeneration" type="2d_trajectory_generation_node" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' " respawn="true" output="screen"/>
       
    
 

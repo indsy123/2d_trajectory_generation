@@ -17,6 +17,7 @@
 #include <pcl_ros/point_cloud.h>
 #include <Eigen/Geometry>
 #include <pcl/filters/frustum_culling.h>
+#include <tf/transform_broadcaster.h>
 
 
 using namespace std;
@@ -24,17 +25,20 @@ using namespace Eigen;
 std::ofstream outdata;
 Eigen::Matrix4f lidar_pose;
 
-ros::Publisher vel_pub, traj_pub, best_traj_pub, ensamble_pub;
-
 class localplanner
 {
     public: 
-      localplanner() 
+      localplanner(ros::NodeHandle* nodehandle) 
       {
+        ROS_INFO("in class constructor of controller");
+        getParamters();
+        initializeSubscribers(); 
+        initializePublishers();
+
         pose_msg_counter  = 0;
         ch_point = {0,0,0,0,0,0,0,0};
         curr_pose = {0,0,0,0,0,0,0,0};
-        final_goal = {20.0, 1.0};
+        //final_goal = {20.0, 1.0};
         ContinueReplanning = true;
         FinalGoalinFOV = false;
         //costmap_ros_ = NULL;
@@ -43,37 +47,78 @@ class localplanner
       void odometry_callback(const nav_msgs::Odometry::ConstPtr& msg);
       void PublishTrajectory(const sensor_msgs::PointCloud2ConstPtr& cloud, VectorXd& XX, VectorXd& YY, VectorXd& theta, VectorXd& XXdot, 
                                      VectorXd& YYdot, VectorXd& thetadot, VectorXd& t, VectorXd& XXddot, VectorXd& YYddot);
+      void publishTransform(const nav_msgs::Odometry::ConstPtr& msg);
     private: 
-      int Nsegments = 5; // number of segments
-      unsigned int pose_msg_counter;
+      ros::NodeHandle nh_;
+      void initializeSubscribers(); 
+      void initializePublishers();
+      void getParamters();
+
+      ros::Subscriber odom_sub, pc_sub;
+      ros::Publisher traj_pub, best_traj_pub, ensamble_pub;
+
+      string pointcloud_topic, pose_topic;
+      double odometry_frequency, lidar_frequency, av_speed, SensorRangeMax, SensorRangeMin, SensorFOV;
       vector<double> ch_point;
       vector<double> curr_pose; 
-      vector<double> final_goal;   
-      int polynomial_order = 5; // order of the polynomial
-      int r = 3; // derivative order for min jerk trajectory
-      double av_speed = 2.0; // desired average speed
-      //nh.param<double>("average_speed", av_speed, 1.0);
-      double ch_time = 0.11; // control horizon time in seconds
-      float delt = 0.05;
+      vector<double> final_goal; 
+
+      unsigned int pose_msg_counter;
+      double ch_time, delt;
       int intervals;
       double Distance2Goal;
-      double SensorRangeMax = 5.0; // range of sensor in meters
-      double SensorRangeMin = 2.0; // range of sensor in meters
-      double SensorFOV = 120.0; // field of view for planning in degrees
-      double GridResolution = 0.25; // resolution of point ensamble grid in meters
       bool ContinueReplanning;
       bool FinalGoalinFOV;
       pcl::PointCloud<pcl::PointXYZ> traj_cloud;
     
 };
 
+void localplanner::getParamters()
+{
+  // get all the parameters from launch file
+  nh_.param<std::string>("pose_topic", pose_topic, "/odometry_topic");    
+  nh_.param<std::string>("pointcloud_topic", pointcloud_topic, "/pointcloud_topic");
+  nh_.param<double>("odometry_frequency", odometry_frequency, 20.0);    
+  nh_.param<double>("lidar_frequency", lidar_frequency, 10.0);
+  nh_.param<double>("average_speed", av_speed, 1.0);    
+  nh_.param<double>("max_sensor_range", SensorRangeMax, 5.0);
+  nh_.param<double>("min_sensor_range", SensorRangeMin, 2.0);
+  nh_.param<double>("sensor_fov", SensorFOV, 120.0);
+  nh_.param<vector<double>>("final_goal", final_goal, {0,0});
+  ch_time = 1.1 * (1.0/lidar_frequency);
+  delt = 1.0/odometry_frequency;
+
+  //print parameters to crosscheck
+  cout <<"pose_topic: "<< pose_topic <<endl;
+  cout <<"pointcloud_topic: "<< pointcloud_topic <<endl;
+  cout <<"odometry_frequency: "<< odometry_frequency <<endl;
+  cout <<"lidar_frequency: "<< lidar_frequency <<endl;
+  cout <<"av_speed: "<< av_speed <<endl;
+  cout <<"SensorRangeMax: "<< SensorRangeMax <<endl;
+  cout <<"SensorRangeMin: "<< SensorRangeMin <<endl;
+  cout <<"final_goal: "<< final_goal[0] << ", "<< final_goal[1] <<endl;
+}
+
+void localplanner::initializeSubscribers()
+{
+  ROS_INFO("Initializing Subscribers");
+  odom_sub = nh_.subscribe(pose_topic.c_str(), 1, &localplanner::odometry_callback, this);  
+  pc_sub = nh_.subscribe(pointcloud_topic.c_str(), 1, &localplanner::trajectory_callback, this);  
+}
+
+void localplanner::initializePublishers()
+{
+  ROS_INFO("Initializing Publishers");
+  bool latch;
+  traj_pub = nh_.advertise<trajectory_msgs::MultiDOFJointTrajectory>("/jackal/desired_trajectory", 1, latch=true);
+  best_traj_pub = nh_.advertise<sensor_msgs::PointCloud2>("/best_trajectory", 1, latch=true);
+  ensamble_pub = nh_.advertise<sensor_msgs::PointCloud2>("/ensamble", 1, latch=true);
+}
+
 
 void localplanner::PublishTrajectory(const sensor_msgs::PointCloud2ConstPtr& cloud, VectorXd& XX, VectorXd& YY, VectorXd& theta, VectorXd& XXdot, 
                                      VectorXd& YYdot, VectorXd& thetadot, VectorXd& t, VectorXd& XXddot, VectorXd& YYddot)
 {
-    //ros::Rate loop_rate(50);
-
-    
     trajectory_msgs::MultiDOFJointTrajectory traj;
     traj.points.resize(t.size());
     traj.joint_names.resize(1);
@@ -121,6 +166,20 @@ void localplanner::PublishTrajectory(const sensor_msgs::PointCloud2ConstPtr& clo
 
 }
 
+void localplanner::publishTransform(const nav_msgs::Odometry::ConstPtr& msg)
+{
+  static tf::TransformBroadcaster br1, br2;
+  tf::Transform transform;
+  transform.setOrigin(tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z) );
+  tf::Quaternion q;
+  q[0]  = msg->pose.pose.orientation.x;
+  q[1]  = msg->pose.pose.orientation.y;
+  q[2]  = msg->pose.pose.orientation.z;
+  q[3]  = msg->pose.pose.orientation.w;
+  transform.setRotation(q);
+  br1.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/map", "/odom"));
+  br2.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/map", "/velodyne"));
+}
 
 void localplanner::odometry_callback(const nav_msgs::Odometry::ConstPtr& msg)
 {
@@ -146,6 +205,7 @@ void localplanner::odometry_callback(const nav_msgs::Odometry::ConstPtr& msg)
   curr_pose[6] = tf2::getYaw(msg->pose.pose.orientation);
   curr_pose[7] = msg->twist.twist.angular.z;
 
+  publishTransform(msg);
 
   Eigen::Quaternionf q;
   q.w() = msg->pose.pose.orientation.w;
@@ -194,17 +254,17 @@ void localplanner::trajectory_callback(const sensor_msgs::PointCloud2ConstPtr& c
     RayGeneration rg;
     vector< vector<double> > points;
     vector< vector<double> > availablepoints;
-    //vector<double> proximity2goal;
+
     vector<double> local_goal(2);
 
     pcl::PointCloud<pcl::PointXYZ> ensamble_cloud;
 
-    rg.GenerateEnsamble(curr_pose, SensorRangeMax, SensorRangeMin, SensorFOV, GridResolution, points, ch_point);
+    rg.GenerateEnsamble(curr_pose, SensorRangeMax, SensorRangeMin, SensorFOV, points);
     rg.CheckCollosion_GetCost(truncated_cloud, final_goal, av_speed, ch_point, points, availablepoints, ensamble_cloud);    
     rg.GenerateLocalGoal(availablepoints, local_goal);
-    cout <<"local goal:"<< local_goal[0]<<" "<< local_goal[1]<<endl;
-    cout <<"current position:"<< curr_pose[0]<<" "<< curr_pose[3]<<endl;
-    cout << "ContinueReplanning:"<<" "<<ContinueReplanning<<" "<<"FinalGoalinFOV"<<" "<<FinalGoalinFOV<<endl;
+    //cout <<"local goal:"<< local_goal[0]<<" "<< local_goal[1]<<endl;
+    //cout <<"current position:"<< curr_pose[0]<<" "<< curr_pose[3]<<endl;
+    //cout << "ContinueReplanning:"<<" "<<ContinueReplanning<<" "<<"FinalGoalinFOV"<<" "<<FinalGoalinFOV<<endl;
 
 
     if (ContinueReplanning)
@@ -231,7 +291,7 @@ void localplanner::trajectory_callback(const sensor_msgs::PointCloud2ConstPtr& c
         intervals = int(ch_time / delt)+1;
         ContinueReplanning = false;
       }
-
+      cout<<ch_time<<","<<T<<", "<<delt<<endl;
       VectorXd t(intervals);
       VectorXd XX(intervals);
       VectorXd YY(intervals);
@@ -249,11 +309,9 @@ void localplanner::trajectory_callback(const sensor_msgs::PointCloud2ConstPtr& c
       }
       
       Traj.getControlHorizonPoint(px, py, ch_time, ch_point);
-      //cout << "ch_point2:" << ch_time << "," << ch_point[0]<< ","<< ch_point[3]<< ","<<ch_point[6]<<endl;
       Traj.PolynomialTrajectory(px, py, T, t, XX, YY, theta, XXdot, YYdot, thetadot, XXddot, YYddot);
 
-      //pcl::PointCloud<pcl::PointXYZ> traj_cloud;
-      
+     
       for(int i = 0; i < XX.size(); i++)
       {
         pcl::PointXYZ pt;
@@ -262,11 +320,18 @@ void localplanner::trajectory_callback(const sensor_msgs::PointCloud2ConstPtr& c
         pt.z = 0.0;
         traj_cloud.points.push_back(pt);
       }
-      //sensor_msgs::PointCloud2 pc_traj;
-      //pcl::toROSMsg(traj_cloud, pc_traj);
-      //pc_traj.header.frame_id = "velodyne";
-      //pc_traj.header.stamp = ros::Time::now();
-      //best_traj_pub.publish(pc_traj);
+      sensor_msgs::PointCloud2 pc_traj;
+      pcl::toROSMsg(traj_cloud, pc_traj);
+      pc_traj.header.frame_id = "map";
+      pc_traj.header.stamp = ros::Time::now();
+      best_traj_pub.publish(pc_traj);
+
+
+      sensor_msgs::PointCloud2 pc_ensamble;
+      pcl::toROSMsg(ensamble_cloud, pc_ensamble);
+      pc_ensamble.header.frame_id = "map";
+      pc_ensamble.header.stamp = ros::Time::now();
+      ensamble_pub.publish(pc_ensamble);
 
     
       PublishTrajectory(cloud, XX, YY, theta, XXdot, YYdot, thetadot, t, XXddot, YYddot);
@@ -276,31 +341,13 @@ void localplanner::trajectory_callback(const sensor_msgs::PointCloud2ConstPtr& c
     {
       cout << " The final goal is within the FOV, static trajectory is being tracked" << endl; 
     }
-    //cout << "total points in trajectory is:"<<traj_cloud.size()<<endl;
-    sensor_msgs::PointCloud2 pc_traj;
-    pcl::toROSMsg(traj_cloud, pc_traj);
-    pc_traj.header.frame_id = "map";
-    pc_traj.header.stamp = ros::Time::now();
-    best_traj_pub.publish(pc_traj);
+    
 
-
-    sensor_msgs::PointCloud2 pc_ensamble;
-    pcl::toROSMsg(ensamble_cloud, pc_ensamble);
-    pc_ensamble.header.frame_id = "map";
-    pc_ensamble.header.stamp = ros::Time::now();
-    ensamble_pub.publish(pc_ensamble);
 
     end = clock(); 
     double time_taken2 = double(end - start) / double(CLOCKS_PER_SEC); 
-    //std::chrono::milliseconds tt = time_taken2 *1000;
     cout << "Time taken in publishing is : " << fixed << time_taken2 << setprecision(7) << "sec" << endl; 
-    //pose_msg_counter += 1;
-    
-    //double wait_for = ch_time - 0.05;
-    //std::this_thread::sleep_for(std::chrono::seconds(wait_for));
-    //loop_rate.sleep();
-    //std::this_thread::sleep_for(std::chrono::milliseconds(200-time_taken2));
-    //sleep(0.2- time_taken2);
+
 }
 
 int main(int argc, char **argv)
@@ -310,30 +357,15 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "trajectory_generation_node");
     ros::NodeHandle nh("~");
 
-    //vel_pub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 50);
-    bool latch;
-    traj_pub = nh.advertise<trajectory_msgs::MultiDOFJointTrajectory>("/jackal/desired_trajectory", 1, latch=true);
-    best_traj_pub = nh.advertise<sensor_msgs::PointCloud2>("/best_trajectory", 1, true);
-    ensamble_pub = nh.advertise<sensor_msgs::PointCloud2>("/ensamble", 1, true);
-
-
-    std::string pointcloud_topic;
-    nh.param<std::string>("pointcloud_topic", pointcloud_topic, "/passthrough2/output");
-
-    std::string odometry_topic;
-    nh.param<std::string>("odometry_topic", odometry_topic, "/jackal/ground_truth/state");
-
-
 
     // Create subscribers
-    localplanner lp;
+    localplanner lp(&nh);
+
     time_t t = time(0);   // get time now
     struct tm * now = localtime( & t );
     char buffer [80];
     strftime (buffer,80,"trajectory - %d-%m-%Y %I:%M:%S.",now);
     outdata.open(buffer);
-    ros::Subscriber subpc = nh.subscribe(pointcloud_topic.c_str(), 1, &localplanner::trajectory_callback, &lp, ros::TransportHints().tcpNoDelay());
-    ros::Subscriber subodom = nh.subscribe(odometry_topic.c_str(), 1, &localplanner::odometry_callback, &lp, ros::TransportHints().tcpNoDelay());
 
     ROS_INFO("done...spinning to ros");
     ros::spin();

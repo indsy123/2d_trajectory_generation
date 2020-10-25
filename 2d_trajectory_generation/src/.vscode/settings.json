@@ -52,6 +52,7 @@
         "string": "cpp",
         "optional": "cpp",
         "*.cuh": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "bitset": "cpp"
     }
 }
