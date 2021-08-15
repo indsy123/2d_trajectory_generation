@@ -22,8 +22,6 @@ cd ..
 
 catkin build -DCMAKE_BUILD_TYPE=Release
 
-All the parameters can be found in launch/param.yaml file. The launch files are: 
-
 To run the planner for end to end navigation:
 
 roslaunch 2d_trajectory_generation jackal_navigation.launch 
